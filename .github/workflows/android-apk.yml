@@ -63,7 +63,9 @@ jobs:
           node_modules/.bin/nativescript --version
 
       - name: Build debug APK
-        run: bash -x ./build.sh
+        env:
+          NS_SKIP_ENV_CHECK: '1'
+        run: npm run build
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
