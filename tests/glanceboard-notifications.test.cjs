@@ -138,3 +138,25 @@ test("a group chat names who wrote the latest message, then the group", () => {
   const entry = glanceNotificationFrom(android({ appName: "Signal", title: "Family", sender: "Alex", text: "hi" }));
   assert.deepEqual(bannerText(entry), { app: "Signal", sender: "Alex · Family" });
 });
+
+test("once read, a repost with the same content is ignored; new content is unread again", () => {
+  const inbox = new GlanceNotificationInbox();
+  inbox.add(note("mail", { title: "Sam", body: "Lunch?" }));
+  inbox.markViewed([{ key: "mail", postTime: 1000 }]);
+  assert.equal(inbox.unread().length, 0);
+  // Gmail refreshing the same email: no banner, stays read.
+  assert.equal(inbox.add(note("mail", { title: "Sam", body: "Lunch?", postTime: 5000 })), false);
+  assert.equal(inbox.unread().length, 0);
+  // A different message under the same key is news.
+  assert.equal(inbox.add(note("mail", { title: "Sam", body: "Running late", postTime: 6000 })), true);
+  assert.equal(inbox.unread().length, 1);
+});
+
+test("a notification dismissed on the phone and posted again later is new", () => {
+  const inbox = new GlanceNotificationInbox();
+  inbox.add(note("a"));
+  inbox.markViewed([{ key: "a", postTime: 1000 }]);
+  inbox.remove("a");
+  assert.equal(inbox.add(note("a")), true);
+  assert.equal(inbox.unread().length, 1);
+});

@@ -67,7 +67,8 @@ export type GlanceboardProvider = {
   notifications: {
     /** Whether the board takes notifications over right now (user setting). */
     enabled: () => boolean;
-    posted: (notification: AndroidNotification) => void;
+    /** False when the board ignored it (a repost of one already read): no banner. */
+    posted: (notification: AndroidNotification) => boolean;
     removed: (notificationKey: string) => void;
     /** The banner for the newest unread notification, at its own (small) size. */
     paintBanner: () => GrayImage;

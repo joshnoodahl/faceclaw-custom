@@ -95,7 +95,7 @@ export class GlanceHost {
   async notificationPosted(notification: AndroidNotification): Promise<void> {
     const provider = this.options.getProvider();
     if (!provider) return;
-    provider.notifications.posted(notification);
+    if (!provider.notifications.posted(notification)) return;
     await this.handleEvent({ type: "banner" }, frameTimings.startFrame("glanceboard notification"));
   }
 
