@@ -41,9 +41,17 @@ function harness() {
     drawLine() {}
     composeInto() {}
   }
+  // No notifications on these boards: the panel has its own tests.
+  const notifications = {
+    glanceNotificationInbox: { onChanged: () => () => {}, markViewed() {}, unread: () => [] },
+    glanceNotificationsEnabled: () => false,
+    glanceNotificationFonts: () => null,
+    glanceNotificationIcon: () => null,
+  };
   const { GlanceBoard } = load('app/apps/glanceboard/board.ts', {
-    '../../graphics/image': { GrayImage }, '../../ui/dashboard-settings': config,
-    './glanceboard-settings': settings, './layout': layout, './widgets': widgets,
+    '../../graphics/image': { GrayImage, G2_LENS_HEIGHT: 480 }, '../../ui/dashboard-settings': config,
+    './glance-notifications': notifications, './glanceboard-settings': settings, './layout': layout,
+    './notification-panel': {}, './widgets': widgets,
   });
   return { settings, GlanceBoard, values, listeners, notify: () => [...listeners].forEach((listener) => listener()) };
 }

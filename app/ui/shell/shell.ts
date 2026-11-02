@@ -650,6 +650,13 @@ class Shell {
     if (window) this.closeWindow(window.windowId);
   }
 
+  /** Close every closeable window (the pinned launcher stays). Returns how many closed. */
+  closeAllWindows(): number {
+    const closeable = this.windows.filter((window) => window.closeable).map((window) => window.windowId);
+    for (const windowId of closeable) this.closeWindow(windowId);
+    return closeable.length;
+  }
+
   getWindows(): readonly ShellWindow[] {
     return this.windows;
   }
@@ -1921,8 +1928,17 @@ class Shell {
         },
       });
     }
-    // Close window sits first but the menu opens on Focus app switcher, so a
-    // reflexive tap never closes the window.
+    if (this.windows.filter((window) => window.closeable).length > 1) {
+      items.push({
+        label: "Close all windows",
+        onSelect: (ctx) => {
+          ctx.stack.pop();
+          this.closeAllWindows();
+        },
+      });
+    }
+    // The close entries sit first but the menu opens on Focus app switcher,
+    // so a reflexive tap never closes anything.
     const initialSelection = items.length;
     items.push(
       {

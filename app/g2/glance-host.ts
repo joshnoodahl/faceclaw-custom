@@ -6,6 +6,9 @@
  * the visibility state machine (glance-state.ts), its auto-hide timer, and
  * the board's render loop; the controller feeds it sleep-time input and the
  * wake barrier, and takes the compositor back to blank when the board hides.
+ * The same surface carries the notification banner (glance-state.ts): a
+ * notification posted while asleep shows it in the board's place, and a tap
+ * over it swaps in the board.
  */
 import { GrayImage, G2_LENS_HEIGHT, G2_LENS_WIDTH } from "../graphics/image";
 import { prepareFrameDraws } from "../graphics/glyph-wire";
@@ -15,6 +18,7 @@ import { type DisplayTarget } from "../native/preview-display";
 import { minWindowTop, type ScreenRect } from "../ui/shell/geometry";
 import { beginRenderPass, endRenderPass } from "../util/render-freshness";
 import { type GlanceBoardInstance, type GlanceboardProvider } from "../apps/app-definition";
+import { type AndroidNotification } from "../native/notification-types";
 import { GLANCE_HIDDEN, glanceEventForGesture, reduceGlance, type GlanceEvent, type GlanceState } from "./glance-state";
 
 export const GLANCE_SURFACE_ID = "glance";
@@ -79,6 +83,29 @@ export class GlanceHost {
   }
 
   /**
+   * Whether a notification posted now, while asleep, belongs to the board
+   * (banner, then the board) rather than the regular popup.
+   */
+  takesNotifications(): boolean {
+    const provider = this.options.getProvider();
+    return !!provider?.isEnabled() && provider.notifications.enabled() && this.options.canShow();
+  }
+
+  /** Hand a notification posted while asleep to the board and show its banner. */
+  async notificationPosted(notification: AndroidNotification): Promise<void> {
+    const provider = this.options.getProvider();
+    if (!provider) return;
+    provider.notifications.posted(notification);
+    await this.handleEvent({ type: "banner" }, frameTimings.startFrame("glanceboard notification"));
+  }
+
+  /** The phone withdrew a notification: the board forgets it (a showing board repaints itself). */
+  notificationRemoved(notificationKey: string): void {
+    this.options.getProvider()?.notifications.removed(notificationKey);
+    if (this.state.visible && this.state.banner) this.requestRender();
+  }
+
+  /**
    * The glance event a sleep-time gesture means under the board's settings,
    * or null when the shell should see the input as usual: nothing while the
    * board is disabled, no press from a tap when "Show on tap" is disabled,
@@ -105,6 +132,13 @@ export class GlanceHost {
     this.state = reduceGlance(before, event, Date.now(), timeoutMs);
     this.armHideTimer();
     if (this.state.visible === before.visible) {
+      // Same surface, new content: the banner gave way to the board, or a
+      // newer notification replaced the banner's.
+      const contentChanged = before.banner !== this.state.banner || (this.state.banner && event.type === "banner");
+      if (this.state.visible && contentChanged) {
+        await this.enqueue(() => this.render(frameId));
+        return;
+      }
       frameTimings.finishFrame(frameId, this.state.visible ? "glanceboard stays up" : "glance event while hidden");
       return;
     }
@@ -186,10 +220,6 @@ export class GlanceHost {
       return;
     }
     if (this.configuredFor !== display) await this.configureSurface(display);
-    if (!this.board) {
-      this.board = provider.createBoard(() => this.requestRender());
-      this.board.start();
-    }
     // Submit the first frame and reveal the surface while the compositor is
     // still blanked, so the unblank below composites the board on top of the
     // sleeping UI in one step rather than flashing the app first.
@@ -224,7 +254,7 @@ export class GlanceHost {
   }
 
   private requestRender(): void {
-    if (!this.board) return;
+    if (!this.board && !this.state.banner) return;
     if (this.rendering) {
       this.renderPending = true;
       return;
@@ -232,24 +262,34 @@ export class GlanceHost {
     void this.enqueue(() => this.render(frameTimings.startFrame("render:glanceboard")));
   }
 
-  /** Paint the board into a full-screen frame and submit it to the surface. */
+  /**
+   * Paint the board (or the banner) into a full-screen frame and submit it to
+   * the surface. The board starts on its first paint, so a banner that is
+   * never opened never starts the widgets.
+   */
   private async render(frameId: number): Promise<void> {
-    const board = this.board;
     const display = this.options.getDisplay();
-    if (!board || !display || this.configuredFor !== display) {
+    const provider = this.options.getProvider();
+    if (!this.state.visible || !provider || !display || this.configuredFor !== display) {
       frameTimings.finishFrame(frameId, "discarded: glanceboard not showing");
       return;
     }
+    if (!this.state.banner && !this.board) {
+      this.board = provider.createBoard(() => this.requestRender());
+      this.board.start();
+    }
+    const board = this.state.banner ? null : this.board;
+    const content = board ? () => board.paint() : () => provider.notifications.paintBanner();
     this.rendering = true;
     try {
-      frameTimings.annotateFrame(frameId, "glanceboard");
+      frameTimings.annotateFrame(frameId, board ? "glanceboard" : "glanceboard banner");
       const wantFreshData = this.nextRenderWantsFreshData;
       this.nextRenderWantsFreshData = false;
       beginRenderPass(!wantFreshData);
       const paintStartedAtMs = Date.now();
       const frame = frameTimings.span(frameId, "paint", () =>
         frameTimings.runWithFrame(frameId, () => {
-          const boardImage = board.paint();
+          const boardImage = content();
           const full = new GrayImage(G2_LENS_WIDTH, G2_LENS_HEIGHT, 0);
           // Centred horizontally in the panel, in the standard window band
           // vertically (Display > Vertical position).
@@ -292,7 +332,7 @@ export class GlanceHost {
       }
     } finally {
       this.rendering = false;
-      if (this.renderPending && this.board) {
+      if (this.renderPending && (this.board || this.state.banner)) {
         this.renderPending = false;
         this.requestRender();
       }

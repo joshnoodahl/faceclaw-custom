@@ -3,7 +3,10 @@
  * without the display plumbing. The board is an alternate sleep-time display:
  * while the shell is asleep a press (single tap, or a head-tilt wake) shows it
  * for a short while, a hold (long-press or short-then-long-press) shows it until release,
- * and a double-tap dismisses it in favour of the regular UI. GlanceHost feeds
+ * and a double-tap dismisses it in favour of the regular UI. A notification
+ * arriving while asleep shows a small banner (the app it came from) in the
+ * board's place for GLANCE_BANNER_MS; a tap or hold over it opens the board,
+ * which then carries the notification in full. GlanceHost feeds
  * these events in and applies the resulting visibility to the compositor.
  *
  * No NativeScript imports: this module is compiled and run under plain node
@@ -13,12 +16,17 @@
 /** Fallback press timeout when the host supplies none; each further press restarts it. */
 export const GLANCE_TIMEOUT_MS = 3000;
 
+/** How long a notification banner stays up on its own. */
+export const GLANCE_BANNER_MS = 3000;
+
 export type GlanceState = {
   visible: boolean;
   /** A long-press is holding the board up; the timer does not run meanwhile. */
   holding: boolean;
   /** When the board hides on its own (epoch ms), or null while held / hidden. */
   hideAtMs: number | null;
+  /** The notification banner shows instead of the board (absent for the board). */
+  banner?: true;
 };
 
 export type GlanceEvent =
@@ -31,7 +39,9 @@ export type GlanceEvent =
   /** The auto-hide timer fired. */
   | { type: "timeout" }
   /** Double-tap (or any other wake of the regular UI): hide now. */
-  | { type: "dismiss" };
+  | { type: "dismiss" }
+  /** A notification arrived while asleep: show the banner, unless the board is already up. */
+  | { type: "banner" };
 
 export const GLANCE_HIDDEN: GlanceState = Object.freeze({ visible: false, holding: false, hideAtMs: null });
 
@@ -56,6 +66,10 @@ export function reduceGlance(
       return GLANCE_HIDDEN;
     case "dismiss":
       return GLANCE_HIDDEN;
+    case "banner":
+      // The board already showing picks the notification up itself.
+      if (state.visible && !state.banner) return state;
+      return { visible: true, holding: false, hideAtMs: nowMs + GLANCE_BANNER_MS, banner: true };
   }
 }
 
