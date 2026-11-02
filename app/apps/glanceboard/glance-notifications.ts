@@ -20,8 +20,9 @@ export function glanceNotificationsEnabled(): boolean {
   return glanceboardEnabledSetting.get() && glanceNotificationsSetting.get();
 }
 
-export function glanceNotificationPosted(notification: AndroidNotification): void {
-  glanceNotificationInbox.add(glanceNotificationFrom(notification));
+/** False for a repost of one already read, which shows no banner. */
+export function glanceNotificationPosted(notification: AndroidNotification): boolean {
+  return glanceNotificationInbox.add(glanceNotificationFrom(notification));
 }
 
 export function glanceNotificationRemoved(notificationKey: string): void {

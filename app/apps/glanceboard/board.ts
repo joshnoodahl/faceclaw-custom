@@ -43,7 +43,7 @@ export class GlanceBoard {
   private currentLayout: GlanceLayout;
   private readonly fixedLayout?: GlanceLayout;
   private readonly notifications: boolean;
-  /** Notifications the last paint showed whole: read once the board hides. */
+  /** Notifications the last paint showed (whole or cut short): read once the board hides. */
   private shownNotifications: Pick<GlanceNotification, "key" | "postTime">[] = [];
 
   constructor(
@@ -137,8 +137,7 @@ export class GlanceBoard {
     const panelMax = G2_LENS_HEIGHT - firstRowBottom(layout) - 1;
     const fonts = unread.length ? glanceNotificationFonts() : null;
     const panel = fonts && panelMax > 0 ? layoutNotificationPanel(fonts, unread, layout.width, panelMax) : null;
-    this.shownNotifications = panel
-      ? panel.entries.filter((entry) => entry.complete).map(({ notification }) => notification) : [];
+    this.shownNotifications = panel ? panel.entries.map(({ notification }) => notification) : [];
     // One hairline row separates the panel from the widgets.
     const top = panel ? panel.height + 1 : 0;
     const gridHeight = panel ? fittingHeight(layout, G2_LENS_HEIGHT - top) : layout.height;

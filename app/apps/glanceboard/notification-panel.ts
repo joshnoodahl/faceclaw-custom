@@ -54,14 +54,26 @@ export function glanceNotificationFrom(notification: AndroidNotification): Glanc
   };
 }
 
+/** Read notifications remembered so their silent reposts stay read. */
+const VIEWED_LIMIT = 100;
+
+function contentOf(notification: GlanceNotification): string {
+  return `${notification.title}\n${notification.body}`;
+}
+
 /**
- * Notifications posted while asleep that the board has not yet shown in
- * full. An entry leaves once the board has painted it whole and then hidden
- * (markViewed), or when the phone withdraws it (remove). A repost under the
- * same key (a messaging app adding a message) replaces it and counts as new.
+ * Notifications posted while asleep that the board has not yet shown. An
+ * entry leaves once the board has painted it and then hidden (markViewed),
+ * even cut short (a long email cannot show whole, and the board does not
+ * scroll), or when the phone withdraws it (remove). A repost under the same
+ * key with new content (a messaging app adding a message) replaces it and
+ * counts as new; one with the content already read (Gmail refreshing its
+ * notification) is ignored.
  */
 export class GlanceNotificationInbox {
   private entries: GlanceNotification[] = [];
+  /** Key -> content of notifications read on the board, oldest first. */
+  private readonly viewed = new Map<string, string>();
   private readonly listeners = new Set<() => void>();
 
   /** Newest first. */
@@ -69,13 +81,19 @@ export class GlanceNotificationInbox {
     return this.entries;
   }
 
-  add(notification: GlanceNotification): void {
+  /** Returns false when it was ignored, as a repost of one already read. */
+  add(notification: GlanceNotification): boolean {
+    if (this.viewed.get(notification.key) === contentOf(notification)) return false;
+    this.viewed.delete(notification.key);
     this.entries = [notification, ...this.entries.filter((entry) => entry.key !== notification.key)]
       .slice(0, GLANCE_INBOX_LIMIT);
     this.changed();
+    return true;
   }
 
   remove(key: string): void {
+    // Gone from the phone: a later notification under the key is new.
+    this.viewed.delete(key);
     const next = this.entries.filter((entry) => entry.key !== key);
     if (next.length === this.entries.length) return;
     this.entries = next;
@@ -88,8 +106,17 @@ export class GlanceNotificationInbox {
    */
   markViewed(shown: readonly Pick<GlanceNotification, "key" | "postTime">[]): void {
     if (!shown.length) return;
-    const next = this.entries.filter((entry) =>
-      !shown.some((seen) => seen.key === entry.key && seen.postTime === entry.postTime));
+    const next = this.entries.filter((entry) => {
+      if (!shown.some((seen) => seen.key === entry.key && seen.postTime === entry.postTime)) return true;
+      this.viewed.delete(entry.key);
+      this.viewed.set(entry.key, contentOf(entry));
+      return false;
+    });
+    while (this.viewed.size > VIEWED_LIMIT) {
+      const oldest = this.viewed.keys().next().value;
+      if (oldest === undefined) break;
+      this.viewed.delete(oldest);
+    }
     if (next.length === this.entries.length) return;
     this.entries = next;
     this.changed();
@@ -132,7 +159,7 @@ export type PanelEntry = {
   bodyLines: string[];
   /** Top of the entry, from the top of the panel. */
   top: number;
-  /** Every line fit: the entry counts as read once the board hides. */
+  /** Every line fit (false when cut short with "..."). */
   complete: boolean;
 };
 
