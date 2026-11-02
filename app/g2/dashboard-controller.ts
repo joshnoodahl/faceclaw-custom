@@ -80,9 +80,13 @@ import { appSwitcherPositionSetting, statusBarPositionSetting, statusBarVisibili
 import { isIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from "../native/battery-optimization";
 import {
   getInstalledEvenHubAppById,
+  getInstalledEvenHubApps,
+  installedEvenHubAppId,
   installedEvenHubPackageId,
   uninstallEvenHubPackage,
 } from "../apps/evenhub/installed-apps";
+import { favoriteAppSetting, setFavoriteAppCatalog } from "../ui/favorite-app";
+import { TripleTapDetector } from "../ui/triple-tap";
 import {
   closeRunningPackage,
   launchInstalledPackage,
@@ -303,6 +307,8 @@ class DashboardController {
    * same wake barrier as the shell and hands the compositor back to the
    * screen-off path when it hides.
    */
+  /** A ring triple tap opens the favorite app (Settings > Customization). */
+  private readonly tripleTap = new TripleTapDetector();
   private readonly glance = new GlanceHost({
     getDisplay: () => this.display,
     getProvider: () => ALL_APPS.find((app) => app.glanceboard)?.glanceboard ?? null,
@@ -410,6 +416,11 @@ class DashboardController {
       launchApp: (appId) => this.launchApp(appId),
       requestShellRender: () => this.requestShellRender(),
     });
+    // The triple-tap app picker offers the launcher's apps and installed EvenHub apps.
+    setFavoriteAppCatalog(() => [
+      ...LAUNCHABLE_APPS.map((app) => ({ appId: app.appId, title: app.title })),
+      ...getInstalledEvenHubApps().map((app) => ({ appId: installedEvenHubAppId(app.packageId), title: app.name })),
+    ]);
     // The action bar's EvenHub phone-UI button hides while that UI is showing.
     onPhoneShownChanged(() => this.emit());
     shell.configure({
@@ -2347,6 +2358,18 @@ class DashboardController {
           frameTimings.finishFrame(frameId, "locked display toggled");
           frameOwned = true;
         }
+        return;
+      }
+      // A ring triple tap: the double tap already did its usual thing; the
+      // third tap opens the favorite app instead of acting as a tap.
+      const favoriteApp = favoriteAppSetting.get();
+      if (favoriteApp && this.tripleTap.observe(inputEvent, inputEvent.timestampMs)) {
+        this.appendLog(`ring triple tap: opening ${favoriteApp}`);
+        shell.wake("window");
+        await this.launchApp(favoriteApp);
+        this.requestShellRender(frameId);
+        frameTimings.finishFrame(frameId, "ring triple tap: favorite app opened");
+        frameOwned = true;
         return;
       }
       if (!shell.isScreenOn()) {

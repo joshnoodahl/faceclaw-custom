@@ -25,9 +25,23 @@ export type GlanceNotification = {
 /** Oldest unread entries drop once the inbox holds this many. */
 export const GLANCE_INBOX_LIMIT = 20;
 
+/**
+ * Who a notification is from, for the banner and the panel's title. A chat's
+ * latest sender comes first, with the conversation after it when that is a
+ * group ("Alex · Family"); otherwise the title, which is the sender or caller
+ * for direct messages, Gmail and calls.
+ */
+export function notificationFrom(notification: AndroidNotification): string {
+  const title = (notification.title || notification.customText?.join(" ") || "").trim();
+  const sender = notification.sender?.trim() ?? "";
+  if (!sender) return title;
+  const conversation = notification.conversationTitle?.trim() || title;
+  return conversation && conversation.toLowerCase() !== sender.toLowerCase() ? `${sender} · ${conversation}` : sender;
+}
+
 export function glanceNotificationFrom(notification: AndroidNotification): GlanceNotification {
   const appName = notification.appName || notification.packageName || "Notification";
-  const title = notification.title || notification.customText?.join(" ") || "";
+  const title = notificationFrom(notification);
   const body = notification.bigText || notification.text || notification.lines.join("\n") ||
     notification.summaryText || "";
   return {
@@ -278,29 +292,45 @@ export function paintNotificationPanel(
 const BANNER_PAD_X = 12;
 const BANNER_PAD_Y = 8;
 const BANNER_MIN_WIDTH = 160;
-const BANNER_MAX_WIDTH = 400;
+const BANNER_MAX_WIDTH = 520;
+/** Between the app name and the sender. */
+const BANNER_SEPARATOR = "  ";
 
 /**
- * The asleep banner: the newest notification's app icon and name only (none
- * of its text, which the board shows when opened), plus how many others are
- * waiting, in a rounded box.
+ * The banner's text for a notification: the app, and who it is from. Messaging
+ * apps, Gmail and incoming calls put the sender or caller in the title; the
+ * message itself waits for the board.
+ */
+export function bannerText(notification: GlanceNotification | undefined): { app: string; sender: string } {
+  const app = notification?.appName ?? "Notification";
+  const sender = notification?.title.trim() ?? "";
+  // Some apps title a notification with their own name; that says nothing new.
+  return { app, sender: sender.toLowerCase() === app.toLowerCase() ? "" : sender };
+}
+
+/**
+ * The asleep banner: the newest notification's app icon, app name and sender
+ * (none of its message, which the board shows when opened), plus how many
+ * others are waiting, in a rounded box. A long sender is cut before the app
+ * name is.
  */
 export function paintNotificationBanner(
   font: UiFont,
   notifications: readonly GlanceNotification[],
   icon: GrayImage | null,
 ): GrayImage {
-  const newest = notifications[0];
-  const name = newest?.appName ?? "Notification";
+  const { app, sender } = bannerText(notifications[0]);
   const extra = notifications.length > 1 ? `+${notifications.length - 1}` : "";
   const contentHeight = Math.max(icon?.height ?? 0, font.lineHeight);
   const height = contentHeight + 2 * BANNER_PAD_Y;
   const iconWidth = icon ? icon.width + ICON_GAP : 0;
   const extraWidth = extra ? font.measureText(extra) + ICON_GAP * 2 : 0;
-  const nameRoom = BANNER_MAX_WIDTH - 2 * BANNER_PAD_X - iconWidth - extraWidth;
-  const label = truncateText(font, name, nameRoom);
-  const width = Math.max(BANNER_MIN_WIDTH,
-    2 * BANNER_PAD_X + iconWidth + font.measureText(label) + extraWidth);
+  const textRoom = BANNER_MAX_WIDTH - 2 * BANNER_PAD_X - iconWidth - extraWidth;
+  const appLabel = truncateText(font, app, sender ? Math.min(textRoom, (textRoom * 0.4) | 0) : textRoom);
+  const senderX = font.measureText(appLabel) + font.measureText(BANNER_SEPARATOR);
+  const senderLabel = sender ? truncateText(font, sender, textRoom - senderX) : "";
+  const textWidth = senderLabel ? senderX + font.measureText(senderLabel) : font.measureText(appLabel);
+  const width = Math.max(BANNER_MIN_WIDTH, 2 * BANNER_PAD_X + iconWidth + textWidth + extraWidth);
   const image = new GrayImage(width, height, 0);
   image.drawRoundedRect(0, 0, width, height, 140);
   let x = BANNER_PAD_X;
@@ -309,7 +339,9 @@ export function paintNotificationBanner(
     x += icon.width + ICON_GAP;
   }
   const textY = BANNER_PAD_Y + ((contentHeight - font.lineHeight) >> 1);
-  image.drawText(font, x, textY, label, 230);
+  // The app dimmer, the sender bright: who it is from is what the glance is for.
+  image.drawText(font, x, textY, appLabel, senderLabel ? 160 : 230);
+  if (senderLabel) image.drawText(font, x + senderX, textY, senderLabel, 240);
   if (extra) image.drawText(font, width - BANNER_PAD_X - font.measureText(extra), textY, extra, 150);
   return image;
 }

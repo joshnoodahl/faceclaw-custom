@@ -27,6 +27,7 @@ import { IOS_PRIVACY_NOTICE } from "../../analytics/privacy-disclosure";
 import type { LayerContext } from "../layers";
 import { drawRightValueMenuItem, openModalMenu, submenuItem, type MenuItem } from "../menu";
 import { shell } from "../shell/shell";
+import { favoriteAppMenuItem } from "../favorite-app";
 import {
   anthropicApiKeySetting,
   appSwitcherPositionSetting,
@@ -285,6 +286,8 @@ function customizationRows(): () => MenuItem[] {
   const statusBarVisibility = enumSettingMenuItem(statusBarVisibilitySetting);
   const windowBorder = toggleSettingMenuItem(windowBorderSetting);
   const rest = [
+    // The app a ring triple tap opens (or None).
+    favoriteAppMenuItem(),
     // Submenu: top-bar battery indicator style plus per-device visibility.
     batteryIndicatorsMenuItem(),
     // Submenu: toggles for menu/icon-grid motion and the screen on/off fade.

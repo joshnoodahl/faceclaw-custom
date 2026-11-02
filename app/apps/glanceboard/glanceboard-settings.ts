@@ -140,7 +140,7 @@ export const glanceNotificationsSetting = new ConfigSettingBoolean({
   storageKey: "glanceboard.notifications",
   defaultValue: false,
   description:
-    "While the display is asleep, a new notification shows a small banner naming its app instead of waking the display with the full popup. Open the Glanceboard to read it in full; it stays there until you have seen it or it is dismissed on the phone.",
+    "While the display is asleep, a new notification shows a small banner with its app and who it is from instead of waking the display with the full popup. Open the Glanceboard to read it in full; it stays there until you have seen it or it is dismissed on the phone.",
 });
 
 /** Hairlines between the board's slots. */

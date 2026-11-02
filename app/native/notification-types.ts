@@ -27,6 +27,12 @@ export type AndroidNotification = {
    * text of its own (Dexcom's glucose reading and units).
    */
   customText?: string[];
+  /**
+   * A chat notification's latest sender and conversation title (Android MessagingStyle).
+   * In a group chat the title is the group; the sender is who wrote the latest message.
+   */
+  sender?: string;
+  conversationTitle?: string;
   /** Full message size reported by iOS, even when the fetched text is bounded. */
   messageSize?: number;
 };

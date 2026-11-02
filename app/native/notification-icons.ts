@@ -431,6 +431,8 @@ function normalizeNotification(value: any): AndroidNotification | null {
     hasLargeIcon: Boolean(value.hasLargeIcon),
     hasCustomView: Boolean(value.hasCustomView),
     customText: Array.isArray(value.customText) ? value.customText.map((text: unknown) => String(text)).filter(Boolean) : [],
+    sender: String(value.sender ?? ""),
+    conversationTitle: String(value.conversationTitle ?? ""),
   };
 }
 
