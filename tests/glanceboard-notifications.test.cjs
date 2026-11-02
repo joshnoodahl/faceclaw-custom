@@ -2,11 +2,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  bannerText,
   GLANCE_INBOX_LIMIT,
   GlanceNotificationInbox,
   glanceNotificationFrom,
   layoutNotificationPanel,
   moreSummary,
+  notificationFrom,
   PANEL_ICON_SIZE,
   PANEL_PAD,
 } = require("../.test-build/app/apps/glanceboard/notification-panel.js");
@@ -115,4 +117,24 @@ test("older notifications show whole or are summarised", () => {
 
 test("the summary names each app once", () => {
   assert.equal(moreSummary([note("a"), note("b"), note("c", { appName: "App a" })]), "+3 more: App a, App b");
+});
+
+test("the banner names the app and who the notification is from", () => {
+  assert.deepEqual(bannerText(note("a", { appName: "Signal", title: "Alex" })), { app: "Signal", sender: "Alex" });
+  // A title that only repeats the app name adds nothing.
+  assert.deepEqual(bannerText(note("a", { appName: "Gmail", title: "gmail" })), { app: "Gmail", sender: "" });
+  assert.deepEqual(bannerText(note("a", { appName: "Phone", title: "" })), { app: "Phone", sender: "" });
+});
+
+test("a group chat names who wrote the latest message, then the group", () => {
+  assert.equal(notificationFrom(android({ title: "Family", sender: "Alex", conversationTitle: "Family" })), "Alex · Family");
+  // Some apps leave the conversation title unset and put the group in the title.
+  assert.equal(notificationFrom(android({ title: "Family", sender: "Alex" })), "Alex · Family");
+  // A direct chat: the sender is the conversation.
+  assert.equal(notificationFrom(android({ title: "Alex", sender: "Alex" })), "Alex");
+  // Not a chat (Gmail, a call), or the latest message is the user's own: the title.
+  assert.equal(notificationFrom(android({ title: "Sam Lee", text: "Lunch?" })), "Sam Lee");
+  assert.equal(notificationFrom(android({ title: "Family", sender: "", conversationTitle: "Family" })), "Family");
+  const entry = glanceNotificationFrom(android({ appName: "Signal", title: "Family", sender: "Alex", text: "hi" }));
+  assert.deepEqual(bannerText(entry), { app: "Signal", sender: "Alex · Family" });
 });

@@ -719,6 +719,24 @@ class FaceclawMediaNotificationListenerService : NotificationListenerService() {
         }
 
         /**
+         * A chat notification's (MessagingStyle) latest sender and conversation title. In a
+         * group chat EXTRA_TITLE is the group, so the sender is only here. The sender is empty
+         * for a message the user sent themselves.
+         */
+        @Suppress("DEPRECATION")
+        private fun putConversation(out: JSONObject, extras: Bundle) {
+            try {
+                putCharSequence(out, "conversationTitle", extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE))
+                val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return
+                val latest = Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages).lastOrNull() ?: return
+                val sender = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) latest.senderPerson?.name else latest.sender
+                putCharSequence(out, "sender", sender)
+            } catch (t: Throwable) {
+                Log.w(TAG, "failed to read conversation sender", t)
+            }
+        }
+
+        /**
          * The picture a notification shows beside its text: its large icon (Gmail's sender
          * avatar or logo), else from Android 11 its conversation's icon, else the icon of its
          * latest message's sender.
@@ -826,6 +844,7 @@ class FaceclawMediaNotificationListenerService : NotificationListenerService() {
                     }
                 }
                 out.put("lines", lines)
+                putConversation(out, extras)
                 out.put("hasPicture", hasNotificationPicture(extras))
             } else {
                 out.put("lines", JSONArray())
