@@ -62,10 +62,31 @@ jobs:
           test -x node_modules/.bin/nativescript
           node_modules/.bin/nativescript --version
 
+      # Every build signs with the same key (the ANDROID_DEBUG_KEYSTORE_BASE64
+      # secret), so a new APK installs over the last one and keeps its data.
+      # Without the secret the runner generates a throwaway key, as before.
+      - name: Install persistent debug signing key
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "::warning::ANDROID_DEBUG_KEYSTORE_BASE64 is not set; this APK is signed with a throwaway key and will not install over earlier builds."
+            exit 0
+          fi
+          mkdir -p "$HOME/.android"
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey > /dev/null
+          echo "Using the persistent debug signing key."
+
       - name: Build debug APK
         env:
           NS_SKIP_ENV_CHECK: '1'
         run: npm run build
+
+      - name: Show APK signing certificate
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          "$APKSIGNER" verify --print-certs platforms/android/app/build/outputs/apk/debug/app-debug.apk | grep -E 'SHA-256'
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
