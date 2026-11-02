@@ -1,6 +1,7 @@
 import { type GrayImage } from "../graphics/image";
 import { type Plane } from "../graphics/plane";
 import { type IconName } from "../graphics/icons";
+import { type AndroidNotification } from "../native/notification-types";
 import { type LayerActions } from "../ui/layers";
 import { type InProcessAppOptions, type InProcessWindow } from "../ui/shell/in-process-window";
 import { WorkerAppHost } from "../ui/shell/worker-window";
@@ -58,6 +59,19 @@ export type GlanceboardProvider = {
   depth: () => number;
   /** A fresh board; requestRender asks the host to repaint it. */
   createBoard: (requestRender: () => void) => GlanceBoardInstance;
+  /**
+   * Notifications posted while asleep, when the board takes them over from
+   * the full popup: a banner naming the app shows at once, and the board
+   * carries the notification in full until it has been seen.
+   */
+  notifications: {
+    /** Whether the board takes notifications over right now (user setting). */
+    enabled: () => boolean;
+    posted: (notification: AndroidNotification) => void;
+    removed: (notificationKey: string) => void;
+    /** The banner for the newest unread notification, at its own (small) size. */
+    paintBanner: () => GrayImage;
+  };
 };
 
 export type GlanceBoardInstance = {

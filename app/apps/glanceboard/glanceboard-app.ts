@@ -18,6 +18,7 @@ import {
   glanceDepthSetting,
   glanceLayout,
   glanceLayoutSetting,
+  glanceNotificationsSetting,
   glanceShowLinesSetting,
   glanceShowOnHeadTiltSetting,
   glanceShowOnLongPressSetting,
@@ -302,7 +303,7 @@ function openSlotPicker(ctx: LayerContext, slotIndex: number): void {
 }
 
 /**
- * Settings: layout, sleep gestures, duration, slot lines, widget font, and
+ * Settings: layout, sleep gestures, duration, notifications, slot lines, widget font, and
  * stereo depth, then a row per widget on the board for its own settings.
  */
 function openGlanceSettings(ctx: LayerContext): void {
@@ -312,6 +313,7 @@ function openGlanceSettings(ctx: LayerContext): void {
     enumSettingMenuItem(glanceTapDurationSetting),
     toggleSettingMenuItem(glanceShowOnLongPressSetting),
     toggleSettingMenuItem(glanceShowOnHeadTiltSetting),
+    toggleSettingMenuItem(glanceNotificationsSetting),
     toggleSettingMenuItem(glanceShowLinesSetting),
     uiFontOverridePickerMenuItem(glanceFont, {
       title: "Glanceboard font",

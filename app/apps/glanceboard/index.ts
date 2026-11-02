@@ -1,5 +1,11 @@
 import { type AppDefinition } from "../app-definition";
 import { GlanceBoard } from "./board";
+import {
+  glanceNotificationPosted,
+  glanceNotificationRemoved,
+  glanceNotificationsEnabled,
+  paintGlanceNotificationBanner,
+} from "./glance-notifications";
 import { createGlanceboardAppWindow, GLANCEBOARD_SURFACE_ID, GLANCEBOARD_WINDOW_ID } from "./glanceboard-app";
 import {
   glanceboardEnabledSetting,
@@ -27,7 +33,13 @@ const glanceboardApp: AppDefinition = {
     showOnLongPress: () => glanceShowOnLongPressSetting.get(),
     showOnHeadTilt: () => glanceShowOnHeadTiltSetting.get(),
     depth: glanceDepth,
-    createBoard: (requestRender) => new GlanceBoard(requestRender),
+    createBoard: (requestRender) => new GlanceBoard(requestRender, { notifications: true }),
+    notifications: {
+      enabled: glanceNotificationsEnabled,
+      posted: glanceNotificationPosted,
+      removed: glanceNotificationRemoved,
+      paintBanner: paintGlanceNotificationBanner,
+    },
   },
 };
 

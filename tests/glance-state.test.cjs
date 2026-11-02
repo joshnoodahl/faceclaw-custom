@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  GLANCE_BANNER_MS,
   GLANCE_HIDDEN,
   GLANCE_TIMEOUT_MS,
   glanceEventForGesture,
@@ -64,4 +65,28 @@ test("the press timeout is the host's when supplied", () => {
   assert.equal(shown.hideAtMs, T0 + 10_000);
   assert.equal(reduceGlance(shown, { type: "timeout" }, T0 + GLANCE_TIMEOUT_MS), shown);
   assert.deepEqual(reduceGlance(shown, { type: "timeout" }, T0 + 10_000), GLANCE_HIDDEN);
+});
+
+test("a notification banner shows on its own timer and hides like a press", () => {
+  const banner = reduceGlance(GLANCE_HIDDEN, { type: "banner" }, T0, 10_000);
+  assert.deepEqual(banner, { visible: true, holding: false, hideAtMs: T0 + GLANCE_BANNER_MS, banner: true });
+  assert.equal(reduceGlance(banner, { type: "timeout" }, T0 + GLANCE_BANNER_MS - 1), banner);
+  assert.deepEqual(reduceGlance(banner, { type: "timeout" }, T0 + GLANCE_BANNER_MS), GLANCE_HIDDEN);
+  // A newer notification renews the banner.
+  assert.equal(reduceGlance(banner, { type: "banner" }, T0 + 1000).hideAtMs, T0 + 1000 + GLANCE_BANNER_MS);
+});
+
+test("a tap or hold over the banner opens the board", () => {
+  const banner = reduceGlance(GLANCE_HIDDEN, { type: "banner" }, T0);
+  assert.deepEqual(reduceGlance(banner, { type: "press" }, T0 + 500, 5000),
+    { visible: true, holding: false, hideAtMs: T0 + 5500 });
+  assert.deepEqual(reduceGlance(banner, { type: "hold" }, T0 + 500), { visible: true, holding: true, hideAtMs: null });
+  assert.deepEqual(reduceGlance(banner, { type: "dismiss" }, T0 + 500), GLANCE_HIDDEN);
+});
+
+test("a notification while the board is up leaves the board as it is", () => {
+  const shown = reduceGlance(GLANCE_HIDDEN, { type: "press" }, T0);
+  assert.equal(reduceGlance(shown, { type: "banner" }, T0 + 100), shown);
+  const held = reduceGlance(GLANCE_HIDDEN, { type: "hold" }, T0);
+  assert.equal(reduceGlance(held, { type: "banner" }, T0 + 100), held);
 });

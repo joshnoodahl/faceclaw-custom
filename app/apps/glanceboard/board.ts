@@ -1,7 +1,14 @@
-import { GrayImage } from "../../graphics/image";
+import { G2_LENS_HEIGHT, GrayImage } from "../../graphics/image";
 import { onAnySettingChanged } from "../../ui/dashboard-settings";
+import {
+  glanceNotificationFonts,
+  glanceNotificationIcon,
+  glanceNotificationInbox,
+  glanceNotificationsEnabled,
+} from "./glance-notifications";
 import { glanceLayout, glanceShowLinesSetting, glanceSlotSettings } from "./glanceboard-settings";
 import { resolveGlanceRegions, slotDividers, type GlanceLayout, type GlanceRegion } from "./layout";
+import { layoutNotificationPanel, paintNotificationPanel, type GlanceNotification } from "./notification-panel";
 import { type GlanceWidget } from "./widget";
 import { findGlanceWidget, glanceWidgetSpans } from "./widgets";
 
@@ -22,18 +29,30 @@ function regionKey(region: GlanceRegion): string {
  * between the slots. Widgets are created and started when the board starts
  * and stopped when it stops; a settings change meanwhile restarts only the
  * regions that changed.
+ *
+ * The sleep-time board (options.notifications) also carries the unread
+ * notifications posted while asleep, in a panel above the slots that grows
+ * with the text. When board and panel would not fit on the display, the
+ * bottom rows of widgets give way; the first row always stays.
  */
 export class GlanceBoard {
   private regions: LiveRegion[] = [];
   private started = false;
   private unsubscribeSettings: (() => void) | null = null;
+  private unsubscribeNotifications: (() => void) | null = null;
   private currentLayout: GlanceLayout;
+  private readonly fixedLayout?: GlanceLayout;
+  private readonly notifications: boolean;
+  /** Notifications the last paint showed whole: read once the board hides. */
+  private shownNotifications: Pick<GlanceNotification, "key" | "postTime">[] = [];
 
   constructor(
     private readonly requestRender: () => void,
-    private readonly fixedLayout?: GlanceLayout,
+    options: { fixedLayout?: GlanceLayout; notifications?: boolean } = {},
   ) {
-    this.currentLayout = fixedLayout ?? glanceLayout();
+    this.fixedLayout = options.fixedLayout;
+    this.notifications = options.notifications ?? false;
+    this.currentLayout = this.fixedLayout ?? glanceLayout();
   }
 
   get layout(): GlanceLayout {
@@ -53,6 +72,9 @@ export class GlanceBoard {
     this.started = true;
     this.applySlotSettings();
     this.unsubscribeSettings = onAnySettingChanged(() => this.applySlotSettings());
+    if (this.notifications) {
+      this.unsubscribeNotifications = glanceNotificationInbox.onChanged(() => this.requestRender());
+    }
   }
 
   stop(): void {
@@ -60,6 +82,11 @@ export class GlanceBoard {
     this.started = false;
     this.unsubscribeSettings?.();
     this.unsubscribeSettings = null;
+    this.unsubscribeNotifications?.();
+    this.unsubscribeNotifications = null;
+    // Unsubscribed first: marking these read must not request a paint.
+    glanceNotificationInbox.markViewed(this.shownNotifications);
+    this.shownNotifications = [];
     for (const live of this.regions) live.widget?.stop();
     this.regions = [];
   }
@@ -99,10 +126,30 @@ export class GlanceBoard {
     if (changed) this.requestRender();
   }
 
-  /** Paint the whole board (layout-sized). Widgets each get a fresh canvas of their region's size. */
+  /**
+   * Paint the whole board: layout-sized, or taller with the notification
+   * panel on top. Widgets each get a fresh canvas of their region's size.
+   */
   paint(): GrayImage {
-    const image = new GrayImage(this.layout.width, this.layout.height, 0);
-    for (const live of this.regions) {
+    const layout = this.layout;
+    const unread = this.notifications && glanceNotificationsEnabled() ? glanceNotificationInbox.unread() : [];
+    // The panel may take everything below the first row of widgets.
+    const panelMax = G2_LENS_HEIGHT - firstRowBottom(layout) - 1;
+    const fonts = unread.length ? glanceNotificationFonts() : null;
+    const panel = fonts && panelMax > 0 ? layoutNotificationPanel(fonts, unread, layout.width, panelMax) : null;
+    this.shownNotifications = panel
+      ? panel.entries.filter((entry) => entry.complete).map(({ notification }) => notification) : [];
+    // One hairline row separates the panel from the widgets.
+    const top = panel ? panel.height + 1 : 0;
+    const gridHeight = panel ? fittingHeight(layout, G2_LENS_HEIGHT - top) : layout.height;
+    const image = new GrayImage(layout.width, top + gridHeight, 0);
+    if (panel && fonts) {
+      paintNotificationPanel(panel, fonts, glanceNotificationIcon).composeInto(image, 0, 0);
+      image.drawLine(0, panel.height, layout.width - 1, panel.height, DIVIDER_VALUE);
+    }
+    // Only whole widgets: one cut off would leave its text hanging below the board.
+    const regions = this.regions.filter((live) => live.region.rect.y + live.region.rect.height <= gridHeight);
+    for (const live of regions) {
       if (!live.widget) continue;
       const { rect } = live.region;
       const canvas = new GrayImage(rect.width, rect.height, 0);
@@ -111,17 +158,29 @@ export class GlanceBoard {
       } catch (error) {
         console.warn(`glanceboard widget ${live.region.choice} paint failed`, error);
       }
-      canvas.composeInto(image, rect.x, rect.y);
+      canvas.composeInto(image, rect.x, top + rect.y);
     }
     if (glanceShowLinesSetting.get()) {
-      drawDividers(image, this.layout, this.regions.map((live) => live.region));
+      drawDividers(image, layout, regions.map((live) => live.region), top);
     }
     return image;
   }
 }
 
-function drawDividers(image: GrayImage, layout: GlanceLayout, regions: readonly GlanceRegion[]): void {
+function drawDividers(image: GrayImage, layout: GlanceLayout, regions: readonly GlanceRegion[], top: number): void {
   for (const line of slotDividers(layout, regions)) {
-    image.drawLine(line.x0, line.y0, line.x1, line.y1, DIVIDER_VALUE);
+    image.drawLine(line.x0, top + line.y0, line.x1, top + line.y1, DIVIDER_VALUE);
   }
+}
+
+/** Bottom of the layout's first row of slots. */
+function firstRowBottom(layout: GlanceLayout): number {
+  return Math.min(...layout.slots.map((slot) => slot.rect.y + slot.rect.height));
+}
+
+/** The tallest run of whole rows, from the top, that fits in `room`. */
+function fittingHeight(layout: GlanceLayout, room: number): number {
+  return Math.max(0, ...layout.slots
+    .map((slot) => slot.rect.y + slot.rect.height)
+    .filter((bottom) => bottom <= room));
 }

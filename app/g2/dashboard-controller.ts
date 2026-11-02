@@ -2846,6 +2846,7 @@ class DashboardController {
     if (this.notificationPopups.withdraw(notificationKey)) {
       this.appendLog(`android notification ${notificationKey} withdrawn before its popup`);
     }
+    this.glance.notificationRemoved(notificationKey);
     try {
       shell.notificationRemoved(notificationKey);
     } catch (error) {
@@ -2859,6 +2860,12 @@ class DashboardController {
     try {
       const notification = readActiveNotifications(ALL_NOTIFICATIONS).find((item) => item.key === notificationKey);
       if (!notification || !shouldShowNotificationOnGlasses(notification.packageName)) return;
+      // Asleep, with the Glanceboard taking notifications: a banner naming
+      // the app instead of waking into the popup; the board has the rest.
+      if (!shell.isScreenOn() && this.glance.takesNotifications()) {
+        void this.glance.notificationPosted(notification);
+        return;
+      }
       // New notifications open a shell modal over the app viewport; if the
       // screen was off, wake for it and go back to sleep when it is closed.
       // Waking while already on would steal focus, so only wake from sleep.

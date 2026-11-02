@@ -181,6 +181,18 @@ function registerTools(options: WindowToolsOptions, registry: ToolRegistry): voi
 
   registry.registerSystemTool(
     {
+      name: "apps.close_all_windows",
+      description: "Close every open window except pinned ones (the launcher).",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    () => {
+      const closed = shell.closeAllWindows();
+      return ok(closed ? `Closed ${closed} window${closed === 1 ? "" : "s"}.` : "No windows to close.");
+    },
+  );
+
+  registry.registerSystemTool(
+    {
       name: "apps.list_folders",
       description:
         "List the app launcher's folders and the apps inside each, plus the ungrouped top-level apps. Includes installed EvenHub apps, shown as app_id (\"display name\").",

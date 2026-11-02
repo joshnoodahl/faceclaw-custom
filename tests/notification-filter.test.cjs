@@ -221,6 +221,13 @@ test('controller filters before waking or opening a popup, and still refreshes t
   });
   instance.requestShellRender = () => renders++;
   instance.appendLog = () => {};
+  let glanceTakes = false;
+  const glancePosted = [], glanceRemoved = [];
+  instance.glance = {
+    takesNotifications: () => glanceTakes,
+    notificationPosted: (notification) => glancePosted.push(notification.key),
+    notificationRemoved: (key) => glanceRemoved.push(key),
+  };
 
   prefs.setNotificationSourceEnabled(mail, false);
   instance.handleAndroidNotificationPosted('key');
@@ -246,6 +253,7 @@ test('controller filters before waking or opening a popup, and still refreshes t
   assert.equal(wakes, 1);
   assert.equal(popups, 1);
   assert.deepEqual(removed, ['working']);
+  assert.deepEqual(glanceRemoved, ['working']);
 
   // The filter is checked again once the delay is over.
   active = [{ ...mail, key: 'key' }];
@@ -253,4 +261,13 @@ test('controller filters before waking or opening a popup, and still refreshes t
   prefs.setNotificationSourceEnabled(mail, false);
   elapse();
   assert.equal(popups, 1);
+
+  // Asleep with the Glanceboard taking notifications: its banner, not a wake and popup.
+  prefs.setNotificationSourceEnabled(mail, true);
+  glanceTakes = true;
+  instance.handleAndroidNotificationPosted('key');
+  elapse();
+  assert.equal(wakes, 1);
+  assert.equal(popups, 1);
+  assert.deepEqual(glancePosted, ['key']);
 });

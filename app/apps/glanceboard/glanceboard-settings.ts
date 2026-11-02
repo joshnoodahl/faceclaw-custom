@@ -129,6 +129,20 @@ export function glanceDepth(): number {
   return Number(glanceDepthSetting.get());
 }
 
+/**
+ * Notifications that arrive while the display is asleep go to the board
+ * instead of waking the display with the full popup (glance-notifications.ts).
+ * With the display on, the popup is unchanged.
+ */
+export const glanceNotificationsSetting = new ConfigSettingBoolean({
+  id: "glanceboard-notifications",
+  label: "Notifications when asleep",
+  storageKey: "glanceboard.notifications",
+  defaultValue: false,
+  description:
+    "While the display is asleep, a new notification shows a small banner naming its app instead of waking the display with the full popup. Open the Glanceboard to read it in full; it stays there until you have seen it or it is dismissed on the phone.",
+});
+
 /** Hairlines between the board's slots. */
 export const glanceShowLinesSetting = new ConfigSettingBoolean({
   id: "glanceboard-show-lines",
